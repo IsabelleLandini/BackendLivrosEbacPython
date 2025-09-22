@@ -1,0 +1,5 @@
+As boas práticas de Git e GitHub incluem realizar commits pequenos e frequentes, usar branches para o desenvolvimento de funcionalidades, manter os commits atômicos e com mensagens descritivas, e aproveitar as funcionalidades do GitHub como o README.md, Pull Requests e branches protegidas para melhorar a colaboração e a qualidade do código.
+
+- Faça commits pequenos e frequentes: Isso facilita a compreensão das alterações, a identificação de problemas e a reversão de commits, além de evitar grandes conflitos de merge.
+- Mantenha os commits atômicos: Cada commit deve focar em uma única alteração lógica relacionada. 
+- Desenvolva em branches: Crie branches para novas funcionalidades ou correções de bugs, isolando o trabalho e evitando impactar a branch principal. 
