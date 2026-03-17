@@ -1,0 +1,19 @@
+[project]
+name = "backendlivros-ebac-python"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Isabelle",email = "isa_landini@hotmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standard] (>=0.122.0,<0.123.0)",
+    "sqlalchemy (>=2.0.44,<3.0.0)",
+    "aiosqlite (>=0.21.0,<0.22.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
