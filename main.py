@@ -23,19 +23,18 @@
 
 #fabrica -> lojista -> consumidor
 #documentaçãp swagger -> documentar os endpoints da nossa aplicação (da nossa API)
-print("API DE LIVROS CARREGADA")
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel 
 from typing import Optional
 import secrets
-import os
+
 
 
 #criar o banco de dados local
 from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 
 
@@ -108,7 +107,7 @@ def get_livros(page: int =1, limit: int =10, db: Session = Depends(sessao_db), c
     if page <1 or limit <1:
         raise HTTPException (status_code=400, detail="Page e limit estão com valores invalidos.")
     
-    livros = db.query(LivroDB) .offset((page -1) * limit).limit(limit).all()
+    livros = db.query(LivroDB).offset((page -1) * limit).limit(limit).all()
     
     if not livros:
         return {"message": "Não existe nenhum livro!"}
@@ -160,7 +159,7 @@ def put_livros (id_livro: int, livro: Livro, db: Session = Depends(sessao_db), c
 
 @app.delete("/deletar/{id_livro}")
 def delete_livro (id_livro:int, db:Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_meu_usuario)):
-    db_livro =  db.query(LivroDB).filter(LivroDB.id == id_livro).first() #verifica se existe
+    db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first() #verifica se existe
 
     if not db_livro:
         raise HTTPException(status_code= 404, detail= "Esse livro não foi encontrado no seu banco de dados!")
