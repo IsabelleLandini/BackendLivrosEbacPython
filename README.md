@@ -1,6 +1,6 @@
-> API REST para gerenciamento de livros com autenticação e paginação.
-
 # 📚 Backend de Livros - FastAPI
+
+> API REST para gerenciamento de livros com autenticação e paginação.
 
 Projeto desenvolvido para fins de estudo e portfólio.
 
