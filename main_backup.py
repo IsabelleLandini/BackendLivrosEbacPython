@@ -1,37 +1,50 @@
-# =========================================
-# API de Livros - FastAPI
-# =========================================
+#API de livros
 
-# Importações principais do FastAPI
+#GET, POST, PUT, DELETE
+
+#POST - adicionar novos livros (Create)
+#GET- buscar os dados dos livros (Read)
+#PUT - atualizar informações dos livros (Update)
+#DELETE - deletar informações dos livros (Delete)
+
+#CRUD
+
+#Create
+#Read
+#Update
+#Delete
+
+#vamos acessar nosso endpoint
+#vamos acessar os PATH´s 
+
+#Path ou Rota
+
+#200 300 400 500
+
+#fabrica -> lojista -> consumidor
+#documentaçãp swagger -> documentar os endpoints da nossa aplicação (da nossa API)
+
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-# Validação de dados
 from pydantic import BaseModel 
-# Tipagem
 from typing import Optional
-# Segurança para comparar credenciais
 import secrets
-# Variáveis de ambiente
-import os
 
 
-# Configuração do Banco de Dados (SQLite)
+
+#criar o banco de dados local
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 
-# URL do banco vinda do .env
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Criação da engine de conexão
+DATABASE_URL = "sqlite:///./livros.db"
+
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-
-# Criação da sessão do banco
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-# Base para criação das tabelas
 Base = declarative_base()
 
-# Configuração da API
+
 app = FastAPI(
     title= "API de livros",
     description= "API para gerenciar catalogo de livros.",
@@ -41,56 +54,37 @@ app = FastAPI(
         "email": "isa_landini@hotmail.com"
     } 
 )
-# Autenticação básica (HTTP Basic)
 
-# Usuário e senha vindos do .env
-MEU_USUARIO = os.getenv("MEU_USUARIO")
-MINHA_SENHA = os.getenv("MINHA_SENHA")
+MEU_USUARIO = "admin"
+MINHA_SENHA = "admin"
 
-# Instância de segurança
 security = HTTPBasic() 
 
 meus_livrozinhos = {}
 
-# Modelos do Banco (SQLAlchemy)
-class LivroDB(Base): 
-    """
-    Representa a tabela 'livros' no banco de dados
-    """
+class LivroDB(Base): #tabela do banco de dados
     __tablename__ = "livros"
     id= Column(Integer, primary_key=True, index=True)
     nome_livro=Column(String, index=True)
     autor_livro=Column(String, index=True)
     ano_livro=Column(Integer)
 
-# Modelos de Entrada (Pydantic)
 class Livro(BaseModel):
-    """
-    Modelo utilizado para validar os dados recebidos na API
-    """
     nome_livro: str
     autor_livro: str
     ano_livro: int
 
-# Cria as tabelas no banco (caso não existam)
+
 Base.metadata.create_all(bind=engine)
 
-# Dependência do banco de dados
 def sessao_db():
-    """
-    Cria e encerra uma sessão com o banco de dados
-    """
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-# Função de autenticação
 def autenticar_meu_usuario(credentials: HTTPBasicCredentials = Depends(security)):
-    """
-    Valida usuário e senha utilizando comparação segura
-    """
     is_username_correct = secrets.compare_digest(credentials.username, MEU_USUARIO)
     is_password_correct = secrets.compare_digest(credentials.password, MINHA_SENHA)
 
@@ -103,30 +97,28 @@ def autenticar_meu_usuario(credentials: HTTPBasicCredentials = Depends(security)
 
     return credentials
 
-# Rotas da API
+
 @app.get("/")
 def hello_world():
-    """
-    Rota inicial para teste da API
-    """
     return {"Hello": "world!"}
 
 @app.get("/livros")
 def get_livros(page: int =1, limit: int =10, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends (autenticar_meu_usuario)):
-    """
-    Lista livros com paginação
-    """
-    # Validação dos parâmetro
     if page <1 or limit <1:
         raise HTTPException (status_code=400, detail="Page e limit estão com valores invalidos.")
-    # Consulta paginada
+    
     livros = db.query(LivroDB).offset((page -1) * limit).limit(limit).all()
-    # Caso não existam livros
+    
     if not livros:
         return {"message": "Não existe nenhum livro!"}
-    # Total de registros
+    
+    #livros_paginados = [
+        # {"id": id_livro, "nome_livro": livro_data["nome_livro"], "autor_livro": livro_data["autor_livro"],"ano_livro": livro_data["ano_livro"]}
+        #for id_livro, livro_data in livros_ordenados[start:end]
+    #]
+
     total_livros = db.query(LivroDB).count()
-    # Retorno estruturado
+
     return {
         "page": page,
         "limit": limit, 
@@ -136,29 +128,26 @@ def get_livros(page: int =1, limit: int =10, db: Session = Depends(sessao_db), c
 
 @app.post("/adiciona")
 def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_meu_usuario)):
-    """
-    Adiciona um novo livro ao banco
-    """
-    # Verifica duplicidade
     db_livro = db.query(LivroDB).filter(LivroDB.nome_livro == livro.nome_livro, LivroDB.autor_livro == livro.autor_livro).first()
     if db_livro:
         raise HTTPException(status_code=400, detail="Esse livro já existe no catálogo.")
-    # Cria novo livro
     novo_livro = LivroDB(nome_livro=livro.nome_livro, autor_livro=livro.autor_livro, ano_livro=livro.ano_livro)
     db.add(novo_livro)
     db.commit()
     db.refresh(novo_livro)
     return {"message": "Livro adicionado com sucesso!"}
 
+#fabrica -> tenis que precisa ser mudado de cor
+# 1- qual é o tenis -> id_livro
+#2- pegar o tenis -> pegar o livro -> id_livro
+#3- processo de pintura para mudar a cor -> atualização das informações do livro
+# dicionario = hasmap
+# chave - valor
 @app.put("/atualiza/{id_livro}")
 def put_livros (id_livro: int, livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_meu_usuario)):
-    """
-    Atualiza um livro existente
-    """
     db_livro = db.query(LivroDB).filter(LivroDB.id== id_livro).first()
     if not db_livro:
         raise HTTPException(status_code=404,detail= "Este livro não foi encontrado no seu banco de dados!" )
-    # Atualização dos campos
     db_livro.nome_livro = livro.nome_livro #atualização atraves do body
     db_livro.autor_livro = livro.autor_livro
     db_livro.ano_livro = livro.ano_livro
@@ -167,11 +156,9 @@ def put_livros (id_livro: int, livro: Livro, db: Session = Depends(sessao_db), c
 
     return {'message': 'O livro foi atualizado com sucesso!'}
 
+
 @app.delete("/deletar/{id_livro}")
 def delete_livro (id_livro:int, db:Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_meu_usuario)):
-    """
-    Remove um livro do banco
-    """
     db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first() #verifica se existe
 
     if not db_livro:
@@ -181,10 +168,3 @@ def delete_livro (id_livro:int, db:Session = Depends(sessao_db), credentials: HT
     db.commit()
 
     return {"message": "Seu livro foi deletado com sucesso!"}
-
-
-    
-
-    
-
-    
