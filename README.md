@@ -1,25 +1,36 @@
-# 📚 Backend de Livros - FastAPI
+# 📚 Backend de Livros - FastAPI + Redis + Celery + Kafka
 
-> Esta API foi desenvolvida utilizando FastAPI, SQLAlchemy e Redis com o objetivo de gerenciar um catálogo de livros e otimizar a performance através de cache.
+> API REST desenvolvida em Python para gerenciamento de um catálogo de livros, com foco em performance e processamento assíncrono.
 
 Projeto desenvolvido para fins de estudo e portfólio.
-
-API REST desenvolvida em Python para gerenciamento de um catálogo de livros.
-Permite realizar operações completas de CRUD (Create, Read, Update, Delete) com autenticação básica.
-O Redis é utilizado para armazenar temporariamente a lista de livros, reduzindo consultas repetidas ao banco de dados e melhorando o tempo de resposta da aplicação.
 
 ---
 
 ## Sobre o projeto
 
-Este projeto foi desenvolvido com o objetivo de praticar conceitos de backend, incluindo:
+Esta API permite realizar operações completas de CRUD (Create, Read, Update, Delete) em um catálogo de livros, com:
 
-* Criação de APIs com FastAPI
-* Integração com banco de dados utilizando SQLAlchemy
-* Uso de Redis como cache
-* Programação assíncrona com `async` e `await`
-* Estruturação de CRUD completo
-* Otimização de performance com cache
+* Autenticação básica
+* Cache com Redis
+* Processamento assíncrono com Celery
+* Integração com Kafka para mensageria
+
+O projeto aplica boas práticas de desenvolvimento backend, incluindo separação de responsabilidades, uso de filas e otimização de performance.
+
+---
+
+## Conceitos Aplicados
+
+* API REST com FastAPI
+* Integração com banco de dados (SQLAlchemy)
+* Cache com Redis
+* Invalidação de cache
+* Processamento assíncrono com Celery
+* Fila de tarefas com Redis (broker)
+* Mensageria com Kafka
+* Programação assíncrona (`async/await`)
+* Autenticação HTTP Basic
+* Containerização com Docker/Podman
 
 ---
 
@@ -30,19 +41,49 @@ Este projeto foi desenvolvido com o objetivo de praticar conceitos de backend, i
 * Uvicorn
 * SQLAlchemy
 * Redis
+* Celery
+* Kafka
+* Docker / Podman
 * python-dotenv
 
 ---
 
 ## Funcionalidades
 
+### Livros
+
 * Listar livros (com cache Redis)
 * Adicionar novos livros
 * Atualizar livros existentes
 * Deletar livros
-* Autenticação HTTP Basic
-* Cache com expiração automática (TTL)
-* Invalidação de cache ao alterar dados
+
+### Assíncrono (Celery)
+
+* Cálculo de soma em background
+* Cálculo de fatorial em background
+* Consulta do status das tarefas
+
+---
+
+## Processamento Assíncrono (Celery + Redis)
+
+A API utiliza o Celery para executar tarefas pesadas em background, evitando bloquear a aplicação principal.
+
+### Tarefas disponíveis
+
+- `POST /calcular_soma` → executa soma assíncrona
+- `POST /calcular_fatorial` → executa cálculo de fatorial
+
+### Fluxo das tarefas
+
+Cliente → FastAPI → Redis (broker) → Celery Worker → Resultado
+
+### Status das tarefas
+
+- `PENDING` → aguardando execução
+- `STARTED` → em execução
+- `SUCCESS` → concluída
+- `FAILURE` → erro na execução
 
 ---
 
@@ -54,31 +95,59 @@ Este projeto foi desenvolvido com o objetivo de praticar conceitos de backend, i
   * Se estiverem → retorna do cache (mais rápido)
   * Se não → busca no banco, salva no Redis e retorna
 
-* O cache:
+### Configuração
 
-  * Utiliza a chave `'livros'`
-  * Possui TTL de **30 segundos**
+- Chave: `livros`
+- TTL: **30 segundos**
 
-* O cache é automaticamente invalidado quando:
+### Invalidação automática
 
-  * Um livro é criado
-  * Um livro é atualizado
-  * Um livro é deletado
+O cache é apagado quando:
+- Um livro é criado
+- Um livro é atualizado
+- Um livro é deletado
 
 ---
 
-## Executando o Redis
+## 🐳 Executando com Docker / Podman (RECOMENDADO)
 
-### ✔️ Opção 1: Local
+Este projeto utiliza múltiplos serviços (API, Redis, Celery, Kafka e Kafka UI).
+
+### Subir o ambiente completo
 
 ```bash
-redis-server
+podman machine start
+podman-compose up -d --build
 ```
 
-### ✔️ Opção 2: Docker
+### Serviços disponíveis
+
+* API → http://localhost:8000
+* Kafka UI → http://localhost:8080
+* Redis → localhost:6379
+* Kafka → localhost:9092
+
+---
+
+## Kafka UI
+
+Acesse:
+
+http://localhost:8080
+
+* Cluster: `local`
+* Visualização de:
+
+  * Brokers
+  * Topics
+  * Mensagens
+
+---
+
+## Executando o Celery Worker
 
 ```bash
-docker run -d -p 6379:6379 redis
+celery -A celery_app worker --loglevel=info
 ```
 
 ---
@@ -121,7 +190,7 @@ source venv/bin/activate
 ### 4. Instale as dependências
 
 ```bash
-pip install fastapi uvicorn sqlalchemy redis python-dotenv
+pip install fastapi uvicorn sqlalchemy redis python-dotenv celery
 ```
 
 ---
@@ -132,11 +201,14 @@ pip install fastapi uvicorn sqlalchemy redis python-dotenv
 DATABASE_URL=sqlite:///./livros.db
 MEU_USUARIO=admin
 MINHA_SENHA=1234
+REDIS_HOST=localhost
+REDIS_PORT=6379
+KAFKA_SERVER=localhost:9092
 ```
 
 ---
 
-### 6. Execute a aplicação
+### 6. Execute a API
 
 ```bash
 uvicorn main:app --reload
@@ -164,43 +236,28 @@ Exemplo:
 
 ## Endpoints
 
-### 🔹 GET /livros
+* GET /livros
+* POST /livros
+* PUT /livros/{id_livro}
+* DELETE /livros/{id_livro}
 
-Lista todos os livros (utilizando cache Redis).
+### Tarefas Assíncronas
 
----
-
-### 🔹 POST /livros
-
-Cria um novo livro.
-
-Exemplo de body:
-
-```json
-{
-  "nome_livro": "Dom Casmurro",
-  "autor_livro": "Machado de Assis",
-  "ano_livro": 1899
-}
+* POST /calcular_soma
+```bash 
+/calcular_soma?a=5&b=10
 ```
 
----
+* POST /calcular_fatorial
+```bash
+/calcular_fatorial?n=5
+```
 
-### 🔹 PUT /livros/{id_livro}
-
-Atualiza um livro existente.
-
----
-
-### 🔹 DELETE /livros/{id_livro}
-
-Remove um livro pelo ID.
-
----
-
-### 🔹 GET /debug/redis
-
-Exibe o conteúdo do cache e o tempo restante (TTL).
+* GET /tarefas/recentes
+Lista as tarefas com:
+* ID
+* Status
+* Resultado
 
 ---
 
@@ -262,14 +319,19 @@ curl -X DELETE -u admin:1234 http://127.0.0.1:8000/livros/1
 
 ---
 
-## Conceitos aplicados
+## Arquitetura
 
-* API REST com FastAPI
-* Integração com banco de dados (SQLAlchemy)
-* Uso de Redis como cache
-* Invalidação de cache
-* Autenticação básica
-* Programação assíncrona (`async/await`)
+O sistema é composto por:
+
+* FastAPI → API principal
+* Redis → cache e broker do Celery
+* Celery → processamento assíncrono
+* Kafka → mensageria
+* Kafka UI → monitoramento
+
+Fluxo geral:
+
+Cliente → API → Redis/Kafka → Worker → Resultado
 
 ---
 

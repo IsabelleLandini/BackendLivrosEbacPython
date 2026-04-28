@@ -15,7 +15,11 @@ import os
 import json
 import redis
 from dotenv import load_dotenv
-
+from fastapi import BackgroundTasks
+from tasks import fatorial, somar
+from celery_app import celery_app
+from celery.result import AsyncResult
+from kafka_producer import enviar_evento
 
 #==============================
 #    CONFIGURAÇÕES INICIAIS
@@ -37,13 +41,16 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Base para criação das tabelas
 Base = declarative_base()
 
+REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
+REDIS_PORT = os.getenv('REDIS_PORT', '6379')
+
 #============================
 #    REDIS (com proteção)
 #============================
 try:
     redis_client = redis.Redis(
-        host='localhost', 
-        port=6379, 
+        host=REDIS_HOST, 
+        port=REDIS_PORT, 
         db=0, 
         decode_responses=True
     )
@@ -101,11 +108,15 @@ Base.metadata.create_all(bind=engine)
 #=====================
 
 # Funções utilitárias para o cache
-async def salvar_livros_redis(livros: list):
+def salvar_livro_redis(livro_id:int, livro):
     if not redis_client:
         return
     try:
-        redis_client.setex('livros', 30, json.dumps(livros))
+        redis_client.setex(
+        f"livro:{livro_id}",
+        30,
+        json.dumps(livro.model_dump())
+    )
     except Exception as e:
         print('Erro ao salvar no Redis:', e)
 
@@ -160,6 +171,57 @@ def hello_world():
     """
     return {"Hello": "world!"}
 
+@app.post('/calcular/soma')
+def calcular_soma(a: int, b:int):
+    tarefa = somar.delay(a, b)
+    if redis_client:
+        try:
+            redis_client.lpush('tarefas_ids', tarefa.id)
+            redis_client.ltrim('tarefas_ids', 0, 49)
+ 
+        except Exception as e:
+            print('Erro ao salvar tarefa no Redis:', e)
+    
+    return {
+        'task_id': tarefa.id,
+        'message':'Tarefa de soma enviada para execução!'
+    }
+
+@app.post('/calcular/fatorial')
+def calcular_fatorial(n: int):
+    tarefa = fatorial.delay(n)
+    if redis_client:
+        try: 
+            redis_client.lpush('tarefas_ids', tarefa.id)
+            redis_client.ltrim('tarefas_ids', 0, 49)
+
+        except Exception as e:
+            print('Erro ao salvar tarefa no Redis:', e)
+    
+    return {
+    'task_id': tarefa.id,
+    'message': 'Tarefa de fatorial enviada para execução!'
+    }
+
+@app.get('/tarefas/recentes')
+def listar_tarefas_recentes():
+    if not redis_client:
+        return {'erro': 'Redis não disponível'}
+    ids = redis_client.lrange('tarefas_ids', 0, -1)
+    tarefas = []
+
+    for task_id in ids:
+        resultado = AsyncResult(task_id, app=celery_app)
+        tarefas.append({
+            'task_id': task_id,
+            'status': resultado.status,
+            'resultado': resultado.result if resultado.successful() else None
+        })
+
+    return {
+        'tarefas': tarefas
+    }
+  
 @app.get('/debug/redis')
 def ver_livros_redis():
     if not redis_client:
@@ -206,12 +268,19 @@ async def get_livros(
         "ano_livro": livro.ano_livro
         } for livro in livros
     ]
-    # Salva no cache
-    await salvar_livros_redis(resposta)
+    if redis_client:
+        try:
+            redis_client.setex(
+                'livros',
+                30,
+                json.dumps(resposta)
+            )
+        except Exception as e:
+            print('Erro ao salvar lista no Redis:', e)
    
     return resposta
 
-@app.post("/livros")
+@app.post("/adiciona")
 async def adicionar_livro(
     livro: Livro, 
     db: Session = Depends(sessao_db), 
@@ -233,9 +302,18 @@ async def adicionar_livro(
     db.add(novo_livro)
     db.commit()
     db.refresh(novo_livro)
-    # invalida cache
-    await deletar_livros_redis()
 
+    salvar_livro_redis(novo_livro.id, livro)
+    try:
+        enviar_evento('livros_eventos', {
+            'acao': 'criar',
+            'livro': livro.model_dump()
+        })
+        print(f"Evento enviado para o Kafka: ação=criar, livro={livro.model_dump()}")
+    except Exception as e:
+        print(f"Erro ao enviar evento para o Kafka: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao enviar evento para o Kafka: {e}")
+    
     return {"message": "Livro adicionado com sucesso!"}
 
 @app.put("/livros/{id_livro}")
