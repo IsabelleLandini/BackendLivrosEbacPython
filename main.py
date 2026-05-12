@@ -5,7 +5,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 # Validação de dados
-from pydantic import BaseModel 
+from pydantic import BaseModel, EmailStr 
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 # Segurança para comparar credenciais
@@ -28,8 +28,8 @@ from kafka_producer import enviar_evento
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 # Usuário e senha vindos do .env
-MEU_USUARIO = os.getenv("MEU_USUARIO")
-MINHA_SENHA = os.getenv("MINHA_SENHA")
+MEU_USUARIO = os.getenv("MEU_USUARIO", 'admin@email.com')
+MINHA_SENHA = os.getenv("MINHA_SENHA", 'admin123')
 
 #============================
 #       BANCO DE DADOS
@@ -47,18 +47,15 @@ REDIS_PORT = os.getenv('REDIS_PORT', '6379')
 #============================
 #    REDIS (com proteção)
 #============================
-try:
-    redis_client = redis.Redis(
-        host=REDIS_HOST, 
-        port=REDIS_PORT, 
-        db=0, 
-        decode_responses=True
-    )
-    redis_client.ping()
-    print('Redis conectado com sucesso!')
-except Exception as e:
-    print('Erro ao conectar no Redis:', e)
-    redis_client = None
+
+redis_client = redis.Redis(
+    host=REDIS_HOST, 
+    port=REDIS_PORT, 
+    db=0, 
+    decode_responses=True
+)
+
+print('Redis conectado com sucesso!')
 
 #===========
 #    APP
@@ -99,6 +96,10 @@ class Livro(BaseModel):
     nome_livro: str
     autor_livro: str
     ano_livro: int
+
+class Usuario(BaseModel):
+    email: EmailStr
+    senha: str
 
 # Cria as tabelas no banco (caso não existam)
 Base.metadata.create_all(bind=engine)
@@ -239,6 +240,25 @@ def ver_livros_redis():
     except Exception as e:
         return{'erro': str(e)}
 
+@app.post('/login')
+def login(usuario: Usuario):
+    email_correto = secrets.compare_digest(
+        usuario.email,
+        MEU_USUARIO
+    )
+    senha_correta = secrets.compare_digest(
+        usuario.senha,
+        MINHA_SENHA)
+    
+    if not (email_correto and senha_correta):
+        raise HTTPException(
+            status_code=401,
+            detail='Usuario ou senha incorretos')
+    
+    return {
+        'message':'Login realizado com sucesso!'
+    }
+
 @app.get("/livros")
 async def get_livros(
     db: Session = Depends(sessao_db), 
@@ -268,17 +288,19 @@ async def get_livros(
         "ano_livro": livro.ano_livro
         } for livro in livros
     ]
+    resultado = {'livros': resposta}
+    
     if redis_client:
         try:
             redis_client.setex(
                 'livros',
                 30,
-                json.dumps(resposta)
+                json.dumps(resultado)
             )
         except Exception as e:
             print('Erro ao salvar lista no Redis:', e)
    
-    return resposta
+    return resultado
 
 @app.post("/adiciona")
 async def adicionar_livro(
@@ -316,7 +338,7 @@ async def adicionar_livro(
     
     return {"message": "Livro adicionado com sucesso!"}
 
-@app.put("/livros/{id_livro}")
+@app.put("/atualiza/{id_livro}")
 async def atualizar_livros (
     id_livro: int, 
     livro: Livro, 
@@ -339,7 +361,7 @@ async def atualizar_livros (
    
     return {'message': 'Livro atualizado com sucesso!'}
 
-@app.delete("/livros/{id_livro}")
+@app.delete("/deletar/{id_livro}")
 async def deletar_livro (
     id_livro:int, 
     db:Session = Depends(sessao_db), 

@@ -13,6 +13,7 @@ celery_app = Celery(
     broker=REDIS_URL,
     backend=REDIS_URL
 )
+celery_app.conf.task_always_eager = True
 
 celery_app.conf.update(
     task_track_started=True,

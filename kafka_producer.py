@@ -12,7 +12,7 @@ def get_producer():
         producer = KafkaProducer(
             bootstrap_servers=KAFKA_SERVER,
             value_serializer=lambda v: json.dumps(v).encode('utf-8')
-            )
+        )
     return producer
 
 def enviar_evento(topico: str, evento: dict):
