@@ -3,12 +3,16 @@ kind: Service
 metadata:
   name: livros-api-service 
 spec: 
-  type: NodePort
+  type: ClusterIP
   selector:
     app: livros-api
   ports:
-    - protocol: TCP
-      port: 80
+    - port: 80
+      targetPort: 8000
+      NodePort: 32489
+  type: LoadBalancer
+  ports:
+    - port: 80
       targetPort: 8000
   
   
