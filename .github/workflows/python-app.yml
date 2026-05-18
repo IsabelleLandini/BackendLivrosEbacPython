@@ -28,6 +28,9 @@ jobs:
       - name: Instalar dependências
         run: poetry install --no-root --no-interaction
 
+      - name: Definir variável de ambiente
+        run: echo 'DATABASE_URL=sqlite:///./test.db' >> $GITHUB_ENV
+        
       - name: Executar testes
         run: poetry run pytest
 
