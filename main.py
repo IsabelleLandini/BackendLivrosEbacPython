@@ -21,6 +21,11 @@ from celery_app import celery_app
 from celery.result import AsyncResult
 from kafka_producer import enviar_evento
 
+import logging.config
+import yaml
+from elasticsearch import Elasticsearch
+from datetime import datetime
+
 #==============================
 #    CONFIGURAÇÕES INICIAIS
 #==============================
@@ -56,6 +61,19 @@ redis_client = redis.Redis(
 )
 
 print('Redis conectado com sucesso!')
+
+ELASTICSEARCH_URL = os.getenv('ELASTICSEARCH_URL', 'http://localhost:9200')
+ELASTICSEARCH_INDEX = os.getenv('ELASTICSEARCH_INDEX', 'livros-logs')
+es_client = Elasticsearch([ELASTICSEARCH_URL])
+
+es = Elasticsearch(hosts='http://localhost:9200')
+with open('logging.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+    logging.config.dictConfig(config)
+
+logger = logging.getLogger(__name__)    
+logger.info('API Inicializada com sucesso')
+
 
 #===========
 #    APP
@@ -170,6 +188,7 @@ def hello_world():
     """
     Rota inicial para teste da API
     """
+    logger.info('Alguém acessou a raiz da API.')
     return {"Hello": "world!"}
 
 @app.post('/calcular/soma')
@@ -261,6 +280,8 @@ def login(usuario: Usuario):
 
 @app.get("/livros")
 async def get_livros(
+    page: int=1,
+    limit: int=10,
     db: Session = Depends(sessao_db), 
     credentials: HTTPBasicCredentials = Depends (autenticar_meu_usuario)):
     """
@@ -279,17 +300,35 @@ async def get_livros(
     # Caso não existam livros
     if not livros:
         return {"message": "Não existe nenhum livro!"}
-    # Retorno estruturado
-    resposta = [
-        {
-        "id": livro.id, 
-        "nome_livro": livro.nome_livro,
-        "autor_livro": livro.autor_livro, 
-        "ano_livro": livro.ano_livro
-        } for livro in livros
-    ]
-    resultado = {'livros': resposta}
+    else: 
+        total_livros = db.query(LivroDB).count()
+        # Retorno estruturado
+        response = [
+            {
+            "id": livro.id, 
+            "nome_livro": livro.nome_livro,
+            "autor_livro": livro.autor_livro, 
+            "ano_livro": livro.ano_livro
+            } for livro in livros
+        ]
+        resultado = {'livros': response}
     
+    log = {
+        'timestamp': datetime.utcnow().isoformat(),
+        'endpoint': '/livros',
+        'usuario': credentials.username,
+        'page': page,
+        'limit': limit,
+        'status': 'succes' if livros else 'not_found',
+        'total_livros': len(livros)
+    }
+
+    try: 
+        es_client.index(index=ELASTICSEARCH_INDEX, body=log)
+    except Exception as e:
+        print(f'Erro ao enviar o Elasticsearch: {e}')
+
+        
     if redis_client:
         try:
             redis_client.setex(
@@ -300,7 +339,7 @@ async def get_livros(
         except Exception as e:
             print('Erro ao salvar lista no Redis:', e)
    
-    return resultado
+    return response
 
 @app.post("/adiciona")
 async def adicionar_livro(
