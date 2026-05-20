@@ -20,7 +20,7 @@ jobs:
       - name: Configurar Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.14'
+          python-version: '3.9'
 
       - name: Instalar Poetry
         run: pip install poetry 
@@ -36,5 +36,9 @@ jobs:
 
       - name: Build da imagem do docker
         run: docker build -t my-fastapi-app:latest .
+
+      - name: Executar container Docker 
+        run: docker run -d -p 8000:8000 --name fastapi-container my-fastapi-app:latest
+        
 
  
